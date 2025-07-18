@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creator Choice Awards</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body { font-family: sans-serif; }
+        .notification {
+            transition: opacity 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- The React app will be rendered inside this div -->
+    <div id="root"></div>
+
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    
+    <!-- Firebase Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+    <!-- 
+        START OF YOUR REACT APPLICATION SCRIPT 
+        All of the application logic is contained within the single <script> tag below.
+    -->
+    <script>
+        // --- Firebase Configuration ---
+        // IMPORTANT: Make sure you have replaced these with your own keys from your Firebase project settings.
+        const firebaseConfig = {
+          apiKey: "AIzaSyARZ8Kez80XR3e9mex2WBSM07VTpMXw7QI",
+          authDomain: "creator-choice-awards.firebaseapp.com",
+          projectId: "creator-choice-awards",
+          storageBucket: "creator-choice-awards.appspot.com",
+          messagingSenderId: "790022484889",
+          appId: "1:790022484889:web:725d3ab1ccbdbe914a5908"
+        };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const storage = firebase.storage();
+        const appId = 'creator-choice-awards-app'; 
+
+        // --- Context for Global State ---
+        const AppContext = React.createContext();
+        const e = React.createElement;
+
+        // --- Reusable Components ---
+        const Notification = () => {
+            const { notification, setNotification } = React.useContext(AppContext);
+
+            React.useEffect(() => {
+                if (notification) {
+                    const timer = setTimeout(() => {
+                        setNotification(null);
+                    }, 5000);
+                    return () => clearTimeout(timer);
+                }
+            }, [notification]);
+
+            if (!notification) return null;
+
+            const bgColor = notification.type === 'success' ? 'bg-green-500' : 'bg-red-500';
+
+            return e('div', { className: `notification fixed top-24 right-8 z-50 p-4 rounded-lg text-white shadow-lg ${bgColor}` },
+                notification.message
+            );
+        };
+
+        const CreatorCard = ({ creator }) => {
+            const { setPage, setSelectedCreatorId } = React.useContext(AppContext);
+            const totalVotes = (creator.freeVotes || 0) + (creator.purchasedVotes || 0);
+
+            return e('div', { className: "bg-white rounded-xl shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 border flex flex-col" },
+                e('img', { src: creator.profilePicUrl || `https://placehold.co/400x300/e0e7ff/4338ca?text=${encodeURIComponent(creator.name)}`, alt: creator.name, className: "w-full h-48 object-cover" }),
+                e('div', { className: "p-5 flex flex-col flex-grow" },
+                    e('h3', { className: "text-xl font-bold text-gray-800 truncate" }, creator.name),
+                    e('p', { className: "text-gray-500 text-sm mb-3" }, creator.category),
+                    e('div', { className: "flex items-center text-indigo-600 font-bold mb-4" },
+                        e('span', { className: "mr-2" }, '⭐'),
+                        e('span', null, `${totalVotes.toLocaleString()} Total Votes`)
+                    ),
+                    e('div', { className: "mt-auto" },
+                        e('button', {
+                            onClick: () => { setSelectedCreatorId(creator.id); setPage('profile'); },
+                            className: "w-full bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition"
+                        }, 'View Profile')
+                    )
+                )
+            );
+        };
+
+        const AuthPage = ({ isCreatorAuth, onClose = null }) => {
+            const { setPage, setNotification } = React.useContext(AppContext);
+            const [isLogin, setIsLogin] = React.useState(true);
+            const [email, setEmail] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [error, setError] = React.useState('');
+
+            const handleAuth = (e) => {
+                e.preventDefault();
+                setError('');
+                if (isLogin) {
+                    auth.signInWithEmailAndPassword(email, password)
+                        .then(userCredential => {
+                             if (isCreatorAuth) setPage('edit-profile');
+                             else if (onClose) onClose();
+                             setNotification({ type: 'success', message: 'Successfully logged in!' });
+                        })
+                        .catch(err => setError(err.message));
+                } else { // Signing up
+                    auth.createUserWithEmailAndPassword(email, password)
+                        .then(userCredential => {
+                            if (isCreatorAuth) {
+                                const user = userCredential.user;
+                                db.collection(`artifacts/${appId}/public/data/creators`).doc(user.uid).set({
+                                    name: "New Creator",
+                                    email: user.email,
+                                    category: "Uncategorized",
+                                    bio: "Welcome! Please edit your profile.",
+                                    freeVotes: 0,
+                                    purchasedVotes: 0,
+                                    profilePicUrl: ''
+                                }).then(() => {
+                                    setPage('edit-profile');
+                                    setNotification({ type: 'success', message: 'Creator account created!' });
+                                });
+                            } else {
+                                if (onClose) onClose();
+                                setNotification({ type: 'success', message: 'Account created successfully!' });
+                            }
+                        })
+                        .catch(err => setError(err.message));
+                }
+            };
+            
+            const title = isLogin ? (isCreatorAuth ? 'Creator Login' : 'Login to Vote') : (isCreatorAuth ? 'Creator Sign Up' : 'Sign Up to Vote');
+            
+            const authFormComponent = e('div', { className: "bg-white p-8 rounded-xl shadow-lg w-full max-w-md" },
+                e('h2', { className: "text-3xl font-bold text-center mb-4" }, title),
+                e('form', { onSubmit: handleAuth, className: "space-y-4" },
+                    e('input', { type: 'email', value: email, onChange: ev => setEmail(ev.target.value), placeholder: "Email", className: "w-full p-3 border rounded-lg", required: true }),
+                    e('input', { type: 'password', value: password, onChange: ev => setPassword(ev.target.value), placeholder: "Password", className: "w-full p-3 border rounded-lg", required: true }),
+                    error && e('p', { className: "text-red-500 text-sm" }, error),
+                    e('button', { type: 'submit', className: "w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700" }, isLogin ? 'Log In' : 'Sign Up')
+                ),
+                e('div', { className: "flex justify-between items-center mt-4" },
+                    e('button', { onClick: () => setIsLogin(!isLogin), className: "text-sm text-indigo-600" }, isLogin ? 'Need an account? Sign Up' : 'Already have an account? Log In'),
+                    onClose && e('button', { onClick: onClose, className: "text-sm text-gray-600" }, 'Cancel')
+                )
+            );
+
+            return onClose ? e('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" }, authFormComponent) : e('div', {className: "max-w-md mx-auto"}, authFormComponent);
+        };
+
+        const PurchaseVotesModal = ({ creator, onClose }) => {
+            const { setNotification } = React.useContext(AppContext);
+            const [amount, setAmount] = React.useState(1);
+            const [processing, setProcessing] = React.useState(false);
+
+            const handlePurchase = async (e) => {
+                e.preventDefault();
+                setProcessing(true);
+                
+                const creatorRef = db.collection(`artifacts/${appId}/public/data/creators`).doc(creator.id);
+                
+                try {
+                    await creatorRef.update({
+                        purchasedVotes: firebase.firestore.FieldValue.increment(amount)
+                    });
+                    setNotification({ type: 'success', message: `Thank you for your purchase of ${amount} vote(s)!` });
+                    onClose();
+                } catch (error) {
+                    console.error("Error purchasing votes:", error);
+                    setNotification({ type: 'error', message: "There was an error with your purchase." });
+                } finally {
+                    setProcessing(false);
+                }
+            };
+
+            return e('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" },
+                e('div', { className: "bg-white p-8 rounded-xl shadow-lg w-full max-w-md" },
+                    e('h2', { className: "text-2xl font-bold mb-4" }, `Buy Votes for ${creator.name}`),
+                    e('p', { className: "mb-4 text-gray-600" }, "$1 = 1 Vote"),
+                    e('form', { onSubmit: handlePurchase },
+                        e('div', { className: "mb-4" },
+                            e('label', { className: "block font-semibold mb-2" }, 'How many votes?'),
+                            e('input', { type: 'number', value: amount, onChange: ev => setAmount(Math.max(1, parseInt(ev.target.value, 10))), className: "w-full p-2 border rounded-lg", min: "1" })
+                        ),
+                        e('div', { className: "flex justify-end gap-4" },
+                            e('button', { type: 'button', onClick: onClose, className: "bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg" }, 'Cancel'),
+                            e('button', { type: 'submit', disabled: processing, className: "bg-green-500 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400" }, processing ? 'Processing...' : `Pay $${amount}`)
+                        )
+                    )
+                )
+            );
+        };
+
+        // --- Page Components ---
+        const HomePage = () => {
+            const { setPage } = React.useContext(AppContext);
+            return e('div', null,
+                e('div', { className: "text-center py-20 px-4 bg-white rounded-xl shadow-2xl mb-12" },
+                    e('h1', { className: "text-5xl md:text-6xl font-extrabold text-gray-900 mb-4" }, 'The Creator Choice Awards'),
+                    e('p', { className: "text-xl text-gray-600 max-w-2xl mx-auto mb-8" }, 'Celebrating the most talented and impactful digital creators, chosen by the community.'),
+                    e('div', { className: "flex flex-col sm:flex-row gap-4 justify-center" },
+                        e('button', { onClick: () => setPage('vote'), className: "bg-indigo-600 text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-indigo-700 transition transform hover:scale-105" }, 'Vote Now'),
+                        e('button', { onClick: () => setPage('creator-signup'), className: "bg-gray-200 text-gray-800 font-bold py-3 px-8 rounded-full text-lg hover:bg-gray-300 transition transform hover:scale-105" }, 'Creator Sign Up')
+                    )
+                ),
+                e('div', { className: "grid md:grid-cols-3 gap-8 text-center my-16" },
+                    e('div', { className: "bg-white p-6 rounded-lg shadow-md" }, e('div', {className: "text-4xl mb-4"}, '👤'), e('h3', { className: "text-xl font-bold mb-2" }, 'Create Profile'), e('p', null, 'Creators sign up and build a profile to share their story.')),
+                    e('div', { className: "bg-white p-6 rounded-lg shadow-md" }, e('div', {className: "text-4xl mb-4"}, '👍'), e('h3', { className: "text-xl font-bold mb-2" }, 'Vote Daily'), e('p', null, 'Sign in to cast your free daily vote and make your voice heard.')),
+                    e('div', { className: "bg-white p-6 rounded-lg shadow-md" }, e('div', {className: "text-4xl mb-4"}, '🏆'), e('h3', { className: "text-xl font-bold mb-2" }, 'Win'), e('p', null, 'The creators with the most votes are crowned winners.'))
+                )
+            );
+        };
+
+        const VotePage = () => {
+          const { creators, loading, searchTerm, setSearchTerm } = React.useContext(AppContext);
+          
+          const filteredCreators = creators.filter(creator => 
+            creator.name.toLowerCase().includes(searchTerm.toLowerCase())
+          );
+
+          if (loading) return e('p', { className: "text-center" }, 'Loading creators...');
+          
+          return e('div', { className: "bg-white p-8 rounded-xl shadow-lg" },
+              e('h2', { className: "text-3xl font-bold text-center mb-4" }, 'Vote for a Creator'),
+              e('div', { className: "mb-8 max-w-lg mx-auto" },
+                e('input', {
+                    type: 'text',
+                    placeholder: 'Search for a creator...',
+                    value: searchTerm,
+                    onChange: (ev) => setSearchTerm(ev.target.value),
+                    className: 'w-full p-3 border-2 border-gray-300 rounded-full focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition'
+                })
+              ),
+              filteredCreators.length > 0 ?
+                e('div', { className: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8" },
+                    filteredCreators.map(creator => e(CreatorCard, { key: creator.id, creator: creator }))
+                ) :
+                e('p', { className: 'text-center text-gray-500' }, 'No creators found.')
+            );
+        };
+        
+        const ProfilePage = () => {
+            const { creators, selectedCreatorId, currentUser, setShowAuthModal, setShowPurchaseModal, setNotification } = React.useContext(AppContext);
+            const creator = creators.find(c => c.id === selectedCreatorId);
+
+            const handleFreeVote = async () => {
+                if (!currentUser) {
+                    setShowAuthModal(true);
+                    return;
+                }
+                
+                const today = new Date().toISOString().slice(0, 10);
+                const voteRecordRef = db.collection(`artifacts/${appId}/users/${currentUser.uid}/dailyVotes`).doc(today);
+                const creatorRef = db.collection(`artifacts/${appId}/public/data/creators`).doc(selectedCreatorId);
+
+                try {
+                    const voteDoc = await voteRecordRef.get();
+                    if (voteDoc.exists) {
+                        setNotification({ type: 'error', message: "You have already cast your free vote today!" });
+                        return;
+                    }
+                    
+                    const batch = db.batch();
+                    batch.update(creatorRef, { freeVotes: firebase.firestore.FieldValue.increment(1) });
+                    batch.set(voteRecordRef, { votedAt: new Date(), creatorId: selectedCreatorId });
+                    await batch.commit();
+                    setNotification({ type: 'success', message: "Thank you for your free vote!" });
+
+                } catch (error) {
+                    console.error("Error casting vote: ", error);
+                    setNotification({ type: 'error', message: "Could not cast your vote. Please try again." });
+                }
+            };
+
+            if (!creator) return e('p', { className: "text-center" }, 'Loading profile or creator not found...');
+
+            const totalVotes = (creator.freeVotes || 0) + (creator.purchasedVotes || 0);
+
+            return e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-4xl mx-auto" },
+                e('img', { src: creator.profilePicUrl || `https://placehold.co/1200x400/e0e7ff/4338ca?text=${encodeURIComponent(creator.name)}`, alt: creator.name, className: "w-full h-64 object-cover rounded-lg mb-8" }),
+                e('h1', { className: "text-4xl font-bold" }, creator.name),
+                e('p', { className: "text-lg text-indigo-600 font-semibold" }, creator.category),
+                e('p', { className: "text-2xl font-bold my-4" }, 'Total Votes: ', e('span', { className: "text-indigo-600" }, totalVotes.toLocaleString())),
+                e('div', { className: "my-6 prose max-w-none" }, e('p', null, creator.bio)),
+                e('div', { className: "flex flex-col sm:flex-row gap-4 mt-8" },
+                    e('button', { onClick: handleFreeVote, className: "flex-1 bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2" }, '👍 Cast Free Daily Vote'),
+                    e('button', { onClick: () => setShowPurchaseModal(true), className: "flex-1 bg-green-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-600 transition flex items-center justify-center gap-2" }, '💲 Buy Votes')
+                )
+            );
+        };
+        
+        const EditProfilePage = () => {
+            const { currentUser, isCreator, setPage, setNotification } = React.useContext(AppContext);
+            const [profile, setProfile] = React.useState(null);
+            const [saving, setSaving] = React.useState(false);
+            const [imageFile, setImageFile] = React.useState(null);
+
+            React.useEffect(() => {
+                if (!currentUser || !isCreator) {
+                    setPage('home'); // Redirect if not a logged-in creator
+                    return;
+                }
+                const unsub = db.collection(`artifacts/${appId}/public/data/creators`).doc(currentUser.uid).onSnapshot(doc => {
+                    setProfile(doc.exists ? doc.data() : null);
+                });
+                return () => unsub();
+            }, [currentUser, isCreator]);
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                const profileRef = db.collection(`artifacts/${appId}/public/data/creators`).doc(currentUser.uid);
+                let updatedProfile = { ...profile };
+
+                try {
+                    if (imageFile) {
+                        const storageRef = storage.ref(`profile_pics/${appId}/${currentUser.uid}`);
+                        await storageRef.put(imageFile);
+                        updatedProfile.profilePicUrl = await storageRef.getDownloadURL();
+                    }
+                    await profileRef.set(updatedProfile, { merge: true });
+                    setNotification({ type: 'success', message: "Profile saved!" });
+                    setPage('vote'); // Go to vote page after saving
+                } catch (error) {
+                    console.error("Error saving profile:", error);
+                    setNotification({ type: 'error', message: "Failed to save profile." });
+                } finally {
+                    setSaving(false);
+                }
+            };
+            
+            const handleChange = ev => setProfile({ ...profile, [ev.target.name]: ev.target.value });
+
+            if (!profile) return e('p', { className: "text-center" }, 'Loading profile...');
+
+            return e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-2xl mx-auto" },
+                e('h2', { className: "text-3xl font-bold text-center mb-8" }, "Edit Your Profile"),
+                e('form', { onSubmit: handleSave, className: "space-y-4" },
+                    e('div', null, 
+                        e('label', { className: "block font-semibold" }, "Profile Picture"),
+                        e('input', { type: "file", accept: "image/*", onChange: ev => setImageFile(ev.target.files[0]), className: "w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"})
+                    ),
+                    e('input', { name: "name", value: profile.name || '', onChange: handleChange, placeholder: "Your Name", className: "w-full p-3 border rounded-lg" }),
+                    e('input', { name: "category", value: profile.category || '', onChange: handleChange, placeholder: "Category", className: "w-full p-3 border rounded-lg" }),
+                    e('textarea', { name: "bio", value: profile.bio || '', onChange: handleChange, placeholder: "Your Bio", className: "w-full p-3 border rounded-lg", rows: "5" }),
+                    e('button', { type: "submit", disabled: saving, className: "w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400" }, saving ? 'Saving...' : 'Save Profile')
+                )
+            );
+        };
+
+        const WinnersPage = () => {
+            const { creators, loading } = React.useContext(AppContext);
+
+            const WinnerCard = ({ title, winner, icon }) => {
+                if (!winner) return e('div', { className: "bg-white p-8 rounded-xl shadow-lg text-center" }, 'Calculating...');
+                const totalVotes = (winner.freeVotes || 0) + (winner.purchasedVotes || 0);
+                return e('div', { className: "bg-white p-8 rounded-xl shadow-lg text-center" },
+                    e('div', { className: "text-5xl mb-4" }, icon),
+                    e('h3', { className: "text-2xl font-bold text-gray-500" }, title),
+                    e('img', { src: winner.profilePicUrl || `https://placehold.co/300x300/e0e7ff/4338ca?text=${encodeURIComponent(winner.name)}`, alt: winner.name, className: "w-48 h-48 rounded-full mx-auto my-6 object-cover border-4 border-indigo-200" }),
+                    e('h2', { className: "text-4xl font-bold" }, winner.name),
+                    e('p', { className: "text-xl text-gray-600" }, winner.category),
+                    e('div', { className: "mt-4 text-lg" },
+                        e('p', null, 'Total Votes: ', e('span', { className: "font-bold" }, totalVotes.toLocaleString())),
+                        e('p', null, 'Free Votes: ', e('span', { className: "font-bold" }, (winner.freeVotes || 0).toLocaleString()))
+                    )
+                );
+            };
+
+            if (loading) return e('p', { className: "text-center" }, 'Calculating winners...');
+            
+            const impactWinner = [...creators].sort((a,b) => ((b.freeVotes || 0) + (b.purchasedVotes || 0)) - ((a.freeVotes || 0) + (a.purchasedVotes || 0)))[0];
+            const authenticWinner = [...creators].sort((a,b) => (b.freeVotes || 0) - (a.freeVotes || 0))[0];
+
+            return e('div', null,
+                e('h2', { className: "text-4xl font-bold text-center mb-10" }, 'And the Winners Are...'),
+                e('div', { className: "grid md:grid-cols-2 gap-10" },
+                    e(WinnerCard, { title: "The Impact Choice Award", winner: impactWinner, icon: '⚡' }),
+                    e(WinnerCard, { title: "The Authentic Choice Award", winner: authenticWinner, icon: '💖' })
+                )
+            );
+        };
+
+        const FaqPage = () => {
+            const FaqItem = ({ q, a }) => {
+              const [isOpen, setIsOpen] = React.useState(false);
+              return e('div', { className: "border-b py-4" },
+                  e('button', { onClick: () => setIsOpen(!isOpen), className: "w-full flex justify-between items-center text-left" },
+                      e('h3', { className: "text-lg font-semibold" }, q),
+                      e('span', { className: `transform transition-transform ${isOpen ? 'rotate-180' : ''}` }, '▼')
+                  ),
+                  isOpen && e('p', { className: "mt-3 text-gray-600" }, a)
+              );
+            };
+            return e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-3xl mx-auto" },
+                e('h2', { className: "text-3xl font-bold text-center mb-8" }, 'Frequently Asked Questions'),
+                e(FaqItem, { q: "What are the different awards?", a: "There are two main awards: 'The Impact Choice Award' is for the creator with the most total votes (free + purchased). 'The Authentic Choice Award' is for the creator with the most free, daily votes, celebrating grassroots community support." }),
+                e(FaqItem, { q: "How do I vote?", a: "To cast a free vote, you must sign up or log in. You can then find a creator and click 'Cast Free Daily Vote'. You can also purchase additional votes for 'The Impact Choice Award' at any time." }),
+                e(FaqItem, { q: "How often can I cast a free vote?", a: "To keep things fair, each registered user can cast one free vote per day. The voting resets at midnight." }),
+                e(FaqItem, { q: "How do donation votes work?", a: "Purchased votes contribute to a creator's score for 'The Impact Choice Award'. This is a great way to show extra support! $1 typically equals 1 vote." })
+            );
+        };
+        
+        const AboutPage = () => e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-3xl mx-auto text-gray-600 leading-relaxed space-y-4" },
+            e('h2', { className: "text-3xl font-bold text-center mb-4 text-gray-900" }, 'About the Awards'),
+            e('p', null, 'The Creator Choice Awards were established to honor digital creators through a transparent, public-driven process. We operate on the core belief that the most meaningful measure of impact, talent, and creativity comes from the fans and communities who engage with the content daily.'),
+            e('p', null, 'Our platform is dedicated to celebrating the full range of modern creators. We recognize individuals who excel in their fields, from Twitch gamers and YouTube educators to TikTok comedians, Instagram artists, and Facebook community builders.'),
+            e('p', null, 'The integrity of our awards lies in its public nature. There are no internal committees or appointed judges; every nomination and vote is cast by the community. This ensures that the Creator Choice Awards are a true reflection of the public\'s voice. This is your chance to give back to the creators who give so much to you.')
+        );
+
+        const ContactPage = () => e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-xl mx-auto text-center" },
+            e('h2', { className: "text-3xl font-bold mb-4" }, 'Get In Touch'),
+            e('p', { className: "text-gray-600 mb-6" }, 'Have questions or want to partner with us?'),
+            e('a', { href: "mailto:contact@creatorchoiceawards.com", className: "inline-block bg-indigo-600 text-white font-bold py-3 px-8 rounded-full hover:bg-indigo-700 transition" }, 'Email Us')
+        );
+
+        // --- Main App Component ---
+        const AppContent = () => {
+          const { 
+              page, setPage, 
+              currentUser, isCreator, 
+              setShowAuthModal, showAuthModal, 
+              showPurchaseModal, setShowPurchaseModal,
+              creators, selectedCreatorId
+          } = React.useContext(AppContext);
+
+          const handleSignOut = () => {
+              auth.signOut().then(() => setPage('home')).catch(err => console.error("Sign out error:", err));
+          };
+
+          const renderPage = () => {
+            switch (page) {
+              case 'vote': return e(VotePage);
+              case 'profile': return e(ProfilePage);
+              case 'creator-signup': return e(AuthPage, { isCreatorAuth: true });
+              case 'edit-profile': return e(EditProfilePage);
+              case 'winners': return e(WinnersPage);
+              case 'faq': return e(FaqPage);
+              case 'about': return e(AboutPage);
+              case 'contact': return e(ContactPage);
+              default: return e(HomePage);
+            }
+          };
+
+          const NavLink = ({ pageName, children, icon }) => (
+            e('button', { onClick: () => setPage(pageName.toLowerCase()), className: `flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition ${page === pageName.toLowerCase() ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-500'}`},
+                e('span', { className: "w-4 h-4" }, icon),
+                e('span', null, children)
+            )
+          );
+          
+          const AuthButtons = () => {
+              if (currentUser && isCreator) {
+                  return e(React.Fragment, null, 
+                      e(NavLink, { pageName: "edit-profile", icon: '⚙️', children: 'Edit Profile' }),
+                      e('button', { onClick: handleSignOut, className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🚪'), e('span', null, 'Sign Out'))
+                  );
+              }
+              if (currentUser && !isCreator) {
+                  return e('button', { onClick: handleSignOut, className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🚪'), e('span', null, 'Sign Out'));
+              }
+              return e('button', { onClick: () => setShowAuthModal(true), className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🔑'), e('span', null, 'Voter Login'));
+          };
+          
+          const selectedCreatorForModal = creators.find(c => c.id === selectedCreatorId);
+
+          return e('div', { className: "bg-gray-100 min-h-screen" },
+              e('header', { className: "bg-indigo-600 text-white shadow-md sticky top-0 z-40" },
+                  e('nav', { className: "container mx-auto px-4 py-3 flex justify-between items-center" },
+                      e('button', { onClick: () => setPage('home'), className: "text-2xl font-bold flex items-center" },
+                          e('span', { className: "mr-2" }, '🏆'),
+                          'Creator Choice Awards'
+                      ),
+                      e('div', { className: "hidden md:flex items-center space-x-2" },
+                          e(NavLink, { pageName: "home", icon: '🏠', children: 'Home' }),
+                          e(NavLink, { pageName: "vote", icon: '👍', children: 'Vote' }),
+                          e(NavLink, { pageName: "winners", icon: '🏆', children: 'Winners' }),
+                          e(NavLink, { pageName: "faq", icon: '❓', children: 'FAQ' }),
+                          e(AuthButtons)
+                      )
+                  )
+              ),
+              e(Notification),
+              e('main', { className: "container mx-auto p-4 md:p-8" }, renderPage()),
+              showAuthModal && e(AuthPage, { isCreatorAuth: false, onClose: () => setShowAuthModal(false) }),
+              showPurchaseModal && selectedCreatorForModal && e(PurchaseVotesModal, { creator: selectedCreatorForModal, onClose: () => setShowPurchaseModal(false) })
+          );
+        }
+
+        // Provider component to wrap the app and manage all state
+        const AppProvider = () => {
+            const [page, setPage] = React.useState('home');
+            const [selectedCreatorId, setSelectedCreatorId] = React.useState(null);
+            const [creators, setCreators] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [currentUser, setCurrentUser] = React.useState(null);
+            const [isCreator, setIsCreator] = React.useState(false);
+            const [showAuthModal, setShowAuthModal] = React.useState(false);
+            const [showPurchaseModal, setShowPurchaseModal] = React.useState(false);
+            const [notification, setNotification] = React.useState(null); // { type: 'success' | 'error', message: '...' }
+            const [searchTerm, setSearchTerm] = React.useState('');
+            
+            // Listen for auth state changes
+            React.useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        const creatorDoc = await db.collection(`artifacts/${appId}/public/data/creators`).doc(user.uid).get();
+                        setIsCreator(creatorDoc.exists);
+                    } else {
+                        setIsCreator(false);
+                    }
+                    setCurrentUser(user);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // Fetch data from Firebase on component mount
+            React.useEffect(() => {
+                const creatorsCollection = db.collection(`artifacts/${appId}/public/data/creators`);
+                const unsubscribe = creatorsCollection.onSnapshot(snapshot => {
+                    const creatorsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    creatorsData.sort((a, b) => ((b.freeVotes || 0) + (b.purchasedVotes || 0)) - ((a.freeVotes || 0) + (a.purchasedVotes || 0)));
+                    setCreators(creatorsData);
+                    setLoading(false);
+                }, err => {
+                    console.error("Error fetching creators:", err);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+            
+            const contextValue = {
+                page, setPage,
+                selectedCreatorId, setSelectedCreatorId,
+                creators, loading,
+                currentUser, isCreator,
+                showAuthModal, setShowAuthModal,
+                showPurchaseModal, setShowPurchaseModal,
+                notification, setNotification,
+                searchTerm, setSearchTerm
+            };
+
+            return e(AppContext.Provider, { value: contextValue }, e(AppContent));
+        };
+
+        ReactDOM.render(
+          e(AppProvider),
+          document.getElementById('root')
+        );
+    </script>
+
+</body>
+</html>
