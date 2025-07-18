@@ -216,16 +216,16 @@
             return e('div', null,
                 e('div', { className: "text-center py-20 px-4 bg-white rounded-xl shadow-2xl mb-12" },
                     e('h1', { className: "text-5xl md:text-6xl font-extrabold text-gray-900 mb-4" }, 'The Creator Choice Awards'),
-                    e('p', { className: "text-xl text-gray-600 max-w-2xl mx-auto mb-8" }, 'Celebrating the most talented and impactful digital creators, chosen by the community.'),
+                    e('p', { className: "text-xl text-gray-600 mx-auto mb-8" }, 'Celebrating the most authentic and impactful digital creators, chosen by the community.'),
                     e('div', { className: "flex flex-col sm:flex-row gap-4 justify-center" },
                         e('button', { onClick: () => setPage('vote'), className: "bg-indigo-600 text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-indigo-700 transition transform hover:scale-105" }, 'Vote Now'),
                         e('button', { onClick: () => setPage('creator-signup'), className: "bg-gray-200 text-gray-800 font-bold py-3 px-8 rounded-full text-lg hover:bg-gray-300 transition transform hover:scale-105" }, 'Creator Sign Up')
                     )
                 ),
                 e('div', { className: "grid md:grid-cols-3 gap-8 text-center my-16" },
-                    e('div', { className: "bg-white p-6 rounded-lg shadow-md" }, e('div', {className: "text-4xl mb-4"}, '👤'), e('h3', { className: "text-xl font-bold mb-2" }, 'Create Profile'), e('p', null, 'Creators sign up and build a profile to share their story.')),
-                    e('div', { className: "bg-white p-6 rounded-lg shadow-md" }, e('div', {className: "text-4xl mb-4"}, '👍'), e('h3', { className: "text-xl font-bold mb-2" }, 'Vote Daily'), e('p', null, 'Sign in to cast your free daily vote and make your voice heard.')),
-                    e('div', { className: "bg-white p-6 rounded-lg shadow-md" }, e('div', {className: "text-4xl mb-4"}, '🏆'), e('h3', { className: "text-xl font-bold mb-2" }, 'Win'), e('p', null, 'The creators with the most votes are crowned winners.'))
+                    e('div', { className: "bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow", onClick: () => setPage('creator-signup') }, e('div', {className: "text-4xl mb-4"}, '👤'), e('h3', { className: "text-xl font-bold mb-2" }, 'Create Profile'), e('p', null, 'Creators sign up and build a profile to share their story.')),
+                    e('div', { className: "bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow", onClick: () => setPage('vote') }, e('div', {className: "text-4xl mb-4"}, '👍'), e('h3', { className: "text-xl font-bold mb-2" }, 'Vote Daily'), e('p', null, 'Sign in to cast your free daily vote and make your voice heard.')),
+                    e('div', { className: "bg-white p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow", onClick: () => setPage('winners') }, e('div', {className: "text-4xl mb-4"}, '🏆'), e('h3', { className: "text-xl font-bold mb-2" }, 'Win'), e('p', null, 'The creators with the most votes are crowned winners.'))
                 )
             );
         };
@@ -422,9 +422,10 @@
         
         const AboutPage = () => e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-3xl mx-auto text-gray-600 leading-relaxed space-y-4" },
             e('h2', { className: "text-3xl font-bold text-center mb-4 text-gray-900" }, 'About the Awards'),
-            e('p', null, 'The Creator Choice Awards were established to honor digital creators through a transparent, public-driven process. We operate on the core belief that the most meaningful measure of impact, talent, and creativity comes from the fans and communities who engage with the content daily.'),
+            e('p', null, 'The Creator Choice Awards were established to honor digital creators through a transparent, public-driven process. We operate on the core belief that the most meaningful measure of impact, authenticity, and creativity comes from the fans and communities who engage with the content daily.'),
             e('p', null, 'Our platform is dedicated to celebrating the full range of modern creators. We recognize individuals who excel in their fields, from Twitch gamers and YouTube educators to TikTok comedians, Instagram artists, and Facebook community builders.'),
-            e('p', null, 'The integrity of our awards lies in its public nature. There are no internal committees or appointed judges; every nomination and vote is cast by the community. This ensures that the Creator Choice Awards are a true reflection of the public\'s voice. This is your chance to give back to the creators who give so much to you.')
+            e('p', null, 'The integrity of our awards lies in its public nature. There are no internal committees or appointed judges; every nomination and vote is cast by the community. This ensures that the Creator Choice Awards are a true reflection of the public\'s voice. This is your chance to give back to the creators who give so much to you.'),
+            e('p', { className: "font-bold text-lg text-center mt-4 text-indigo-600" }, "Let's go!")
         );
 
         const ContactPage = () => e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-xl mx-auto text-center" },
@@ -492,9 +493,8 @@
                       ),
                       e('div', { className: "hidden md:flex items-center space-x-2" },
                           e(NavLink, { pageName: "home", icon: '🏠', children: 'Home' }),
-                          e(NavLink, { pageName: "vote", icon: '👍', children: 'Vote' }),
+                          e(NavLink, { pageName: "vote", icon: '�', children: 'Vote' }),
                           e(NavLink, { pageName: "winners", icon: '🏆', children: 'Winners' }),
-                          e(NavLink, { pageName: "faq", icon: '❓', children: 'FAQ' }),
                           e(AuthButtons)
                       )
                   )
@@ -502,7 +502,24 @@
               e(Notification),
               e('main', { className: "container mx-auto p-4 md:p-8" }, renderPage()),
               showAuthModal && e(AuthPage, { isCreatorAuth: false, onClose: () => setShowAuthModal(false) }),
-              showPurchaseModal && selectedCreatorForModal && e(PurchaseVotesModal, { creator: selectedCreatorForModal, onClose: () => setShowPurchaseModal(false) })
+              showPurchaseModal && selectedCreatorForModal && e(PurchaseVotesModal, { creator: selectedCreatorForModal, onClose: () => setShowPurchaseModal(false) }),
+              
+              e('footer', { className: "bg-white mt-12 border-t" },
+                  e('div', { className: "container mx-auto py-8 px-4" },
+                      e('div', { className: "flex flex-col md:flex-row justify-between items-center text-center md:text-left" },
+                          e('div', null, 
+                              e('h3', {className: "text-xl font-bold"}, 'Creator Choice Awards'),
+                              e('p', {className: "text-gray-500"}, 'Chosen by the community.')
+                          ),
+                          e('div', { className: "flex space-x-6 mt-4 md:mt-0" },
+                              e('button', { onClick: () => setPage('about'), className: "text-gray-600 hover:text-indigo-600" }, 'About'),
+                              e('button', { onClick: () => setPage('faq'), className: "text-gray-600 hover:text-indigo-600" }, 'FAQ'),
+                              e('button', { onClick: () => setPage('contact'), className: "text-gray-600 hover:text-indigo-600" }, 'Contact')
+                          )
+                      ),
+                      e('div', { className: "text-center text-gray-400 mt-8 pt-4 border-t" }, `© ${new Date().getFullYear()} Creator Choice Awards. All Rights Reserved.`)
+                  )
+              )
           );
         }
 
@@ -570,3 +587,4 @@
 
 </body>
 </html>
+�
