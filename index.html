@@ -7,9 +7,12 @@
     
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: sans-serif; }
+        body { font-family: 'Inter', sans-serif; }
         .notification {
             transition: opacity 0.5s ease-in-out;
         }
@@ -24,44 +27,33 @@
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     
-    <!-- Firebase Libraries -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
-
     <!-- 
-        START OF YOUR REACT APPLICATION SCRIPT 
-        All of the application logic is contained within the single <script> tag below.
+        Updated Firebase SDK Scripts (v11+)
+        Using the modern modular/ESM versions for better performance.
     -->
-    <script>
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, updateDoc, increment, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
         // --- Firebase Configuration ---
-        // ====================================================================================
-        // IMPORTANT: PASTE YOUR REAL FIREBASE WEB API KEY IN THE LINE BELOW
-        // You can find this key at the top of your Firebase Project Settings page.
-        // It should start with "AIzaSyA..."
-        // ====================================================================================
-        const YOUR_API_KEY = "AIzaSyArZBKez8OxR3e9mex2uBSmO7VTpMXw7QI";
-        // ====================================================================================
-
-
-        // --- DO NOT EDIT THE CONFIGURATION BELOW THIS LINE ---
         const firebaseConfig = {
-          apiKey: AIzaSyArZBKez8OxR3e9mex2uBSmO7VTpMXw7QI,
-          authDomain: "creator-choice-awards.firebaseapp.com",
-          projectId: "creator-choice-awards",
-          storageBucket: "creator-choice-awards.appspot.com",
-          messagingSenderId: "790022484889",
-          appId: "1:790022484889:web:725d3ab1ccbdbe914a5908"
+            // IMPORTANT: Your API key must be a string.
+            apiKey: "AIzaSyArZBKez8OxR3e9mex2uBSmO7VTpMXw7QI",
+            authDomain: "creator-choice-awards.firebaseapp.com",
+            projectId: "creator-choice-awards",
+            storageBucket: "creator-choice-awards.appspot.com",
+            messagingSenderId: "790022484889",
+            appId: "1:790022484889:web:725d3ab1ccbdbe914a5908"
         };
 
         // Initialize Firebase
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        const storage = firebase.storage();
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const storage = getStorage(app);
         const appId = 'creator-choice-awards-app'; 
 
         // --- Context for Global State ---
@@ -74,9 +66,7 @@
 
             React.useEffect(() => {
                 if (notification) {
-                    const timer = setTimeout(() => {
-                        setNotification(null);
-                    }, 5000);
+                    const timer = setTimeout(() => setNotification(null), 5000);
                     return () => clearTimeout(timer);
                 }
             }, [notification]);
@@ -84,12 +74,86 @@
             if (!notification) return null;
 
             const bgColor = notification.type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            return e('div', { className: `notification fixed top-24 right-8 z-50 p-4 rounded-lg text-white shadow-lg ${bgColor}` }, notification.message);
+        };
+        
+        // NEW, SIMPLIFIED AUTH COMPONENT
+        const AuthPage = ({ isCreatorAuth = false, onClose = null }) => {
+            const { setPage, setNotification } = React.useContext(AppContext);
+            const [isLoginView, setIsLoginView] = React.useState(true);
+            const [email, setEmail] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [error, setError] = React.useState('');
+            const [loading, setLoading] = React.useState(false);
 
-            return e('div', { className: `notification fixed top-24 right-8 z-50 p-4 rounded-lg text-white shadow-lg ${bgColor}` },
-                notification.message
+            const handleAuthAction = async (event) => {
+                event.preventDefault();
+                setError('');
+                setLoading(true);
+
+                try {
+                    if (isLoginView) { // --- LOGIN LOGIC ---
+                        await signInWithEmailAndPassword(auth, email, password);
+                        setNotification({ type: 'success', message: 'Successfully logged in!' });
+                        if (isCreatorAuth) {
+                            setPage('edit-profile');
+                        } else if (onClose) {
+                            onClose();
+                        }
+                    } else { // --- SIGN UP LOGIC ---
+                        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                        const user = userCredential.user;
+                        if (isCreatorAuth) {
+                            // Create a new creator document in Firestore
+                            const creatorDocRef = doc(db, `artifacts/${appId}/public/data/creators`, user.uid);
+                            await setDoc(creatorDocRef, {
+                                name: "New Creator",
+                                email: user.email,
+                                category: "Uncategorized",
+                                bio: "Welcome! Please edit your profile.",
+                                freeVotes: 0,
+                                purchasedVotes: 0,
+                                profilePicUrl: ''
+                            });
+                            setNotification({ type: 'success', message: 'Creator account created!' });
+                            setPage('edit-profile');
+                        } else {
+                            setNotification({ type: 'success', message: 'Account created successfully!' });
+                            if (onClose) onClose();
+                        }
+                    }
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const title = isLoginView ? (isCreatorAuth ? 'Creator Login' : 'Login to Vote') : (isCreatorAuth ? 'Creator Sign Up' : 'Sign Up to Vote');
+            const buttonText = isLoginView ? 'Log In' : 'Create Account';
+            const switchText = isLoginView ? 'Need an account? Sign Up' : 'Already have an account? Log In';
+
+            const authFormComponent = e('div', { className: "bg-white p-8 rounded-xl shadow-lg w-full max-w-md" },
+                e('div', { className: "flex justify-between items-start" }, 
+                    e('h2', { className: "text-3xl font-bold mb-6" }, title),
+                    onClose && e('button', { onClick: onClose, className: "text-2xl text-gray-500 hover:text-gray-800" }, '×')
+                ),
+                e('form', { onSubmit: handleAuthAction, className: "space-y-4" },
+                    e('input', { type: 'email', value: email, onChange: ev => setEmail(ev.target.value), placeholder: "Email", className: "shadow-sm appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500", required: true }),
+                    e('input', { type: 'password', value: password, onChange: ev => setPassword(ev.target.value), placeholder: "Password", className: "shadow-sm appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500", required: true }),
+                    error && e('p', { className: "text-red-500 text-sm" }, error),
+                    e('button', { type: 'submit', disabled: loading, className: "w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition-colors duration-300 disabled:bg-gray-400" }, loading ? 'Processing...' : buttonText),
+                    e('button', { type: 'button', onClick: () => setIsLoginView(!isLoginView), className: "w-full text-center text-sm text-indigo-600 hover:underline mt-4" }, switchText)
+                )
             );
+
+            // If onClose is provided, it's a modal. Otherwise, it's a standalone page.
+            return onClose 
+                ? e('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" }, authFormComponent) 
+                : e('div', { className: "flex items-center justify-center min-h-screen" }, authFormComponent);
         };
 
+        // --- Other components (unchanged) ---
         const CreatorCard = ({ creator }) => {
             const { setPage, setSelectedCreatorId } = React.useContext(AppContext);
             const totalVotes = (creator.freeVotes || 0) + (creator.purchasedVotes || 0);
@@ -113,69 +177,6 @@
             );
         };
 
-        const AuthPage = ({ isCreatorAuth, onClose = null }) => {
-            const { setPage, setNotification } = React.useContext(AppContext);
-            const [isLogin, setIsLogin] = React.useState(true);
-            const [email, setEmail] = React.useState('');
-            const [password, setPassword] = React.useState('');
-            const [error, setError] = React.useState('');
-
-            const handleAuth = (e) => {
-                e.preventDefault();
-                setError('');
-                if (isLogin) {
-                    auth.signInWithEmailAndPassword(email, password)
-                        .then(userCredential => {
-                             if (isCreatorAuth) setPage('edit-profile');
-                             else if (onClose) onClose();
-                             setNotification({ type: 'success', message: 'Successfully logged in!' });
-                        })
-                        .catch(err => setError(err.message));
-                } else { // Signing up
-                    auth.createUserWithEmailAndPassword(email, password)
-                        .then(userCredential => {
-                            if (isCreatorAuth) {
-                                const user = userCredential.user;
-                                db.collection(`artifacts/${appId}/public/data/creators`).doc(user.uid).set({
-                                    name: "New Creator",
-                                    email: user.email,
-                                    category: "Uncategorized",
-                                    bio: "Welcome! Please edit your profile.",
-                                    freeVotes: 0,
-                                    purchasedVotes: 0,
-                                    profilePicUrl: ''
-                                }).then(() => {
-                                    setPage('edit-profile');
-                                    setNotification({ type: 'success', message: 'Creator account created!' });
-                                });
-                            } else {
-                                if (onClose) onClose();
-                                setNotification({ type: 'success', message: 'Account created successfully!' });
-                            }
-                        })
-                        .catch(err => setError(err.message));
-                }
-            };
-            
-            const title = isLogin ? (isCreatorAuth ? 'Creator Login' : 'Login to Vote') : (isCreatorAuth ? 'Creator Sign Up' : 'Sign Up to Vote');
-            
-            const authFormComponent = e('div', { className: "bg-white p-8 rounded-xl shadow-lg w-full max-w-md" },
-                e('h2', { className: "text-3xl font-bold text-center mb-4" }, title),
-                e('form', { onSubmit: handleAuth, className: "space-y-4" },
-                    e('input', { type: 'email', value: email, onChange: ev => setEmail(ev.target.value), placeholder: "Email", className: "w-full p-3 border rounded-lg", required: true }),
-                    e('input', { type: 'password', value: password, onChange: ev => setPassword(ev.target.value), placeholder: "Password", className: "w-full p-3 border rounded-lg", required: true }),
-                    error && e('p', { className: "text-red-500 text-sm" }, error),
-                    e('button', { type: 'submit', className: "w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700" }, isLogin ? 'Log In' : 'Sign Up')
-                ),
-                e('div', { className: "flex justify-between items-center mt-4" },
-                    e('button', { onClick: () => setIsLogin(!isLogin), className: "text-sm text-indigo-600" }, isLogin ? 'Need an account? Sign Up' : 'Already have an account? Log In'),
-                    onClose && e('button', { onClick: onClose, className: "text-sm text-gray-600" }, 'Cancel')
-                )
-            );
-
-            return onClose ? e('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" }, authFormComponent) : e('div', {className: "max-w-md mx-auto"}, authFormComponent);
-        };
-
         const PurchaseVotesModal = ({ creator, onClose }) => {
             const { setNotification } = React.useContext(AppContext);
             const [amount, setAmount] = React.useState(1);
@@ -184,13 +185,9 @@
             const handlePurchase = async (e) => {
                 e.preventDefault();
                 setProcessing(true);
-                
-                const creatorRef = db.collection(`artifacts/${appId}/public/data/creators`).doc(creator.id);
-                
+                const creatorRef = doc(db, `artifacts/${appId}/public/data/creators`, creator.id);
                 try {
-                    await creatorRef.update({
-                        purchasedVotes: firebase.firestore.FieldValue.increment(amount)
-                    });
+                    await updateDoc(creatorRef, { purchasedVotes: increment(amount) });
                     setNotification({ type: 'success', message: `Thank you for your purchase of ${amount} vote(s)!` });
                     onClose();
                 } catch (error) {
@@ -219,7 +216,6 @@
             );
         };
 
-        // --- Page Components ---
         const HomePage = () => {
             const { setPage } = React.useContext(AppContext);
             return e('div', null,
@@ -240,30 +236,21 @@
         };
 
         const VotePage = () => {
-          const { creators, loading, searchTerm, setSearchTerm } = React.useContext(AppContext);
-          
-          const filteredCreators = creators.filter(creator => 
-            creator.name.toLowerCase().includes(searchTerm.toLowerCase())
-          );
+            const { creators, loading, searchTerm, setSearchTerm } = React.useContext(AppContext);
+            const filteredCreators = creators.filter(creator => creator.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-          if (loading) return e('p', { className: "text-center" }, 'Loading creators...');
-          
-          return e('div', { className: "bg-white p-8 rounded-xl shadow-lg" },
-              e('h2', { className: "text-3xl font-bold text-center mb-4" }, 'Vote for a Creator'),
-              e('div', { className: "mb-8 max-w-lg mx-auto" },
-                e('input', {
-                    type: 'text',
-                    placeholder: 'Search for a creator...',
-                    value: searchTerm,
-                    onChange: (ev) => setSearchTerm(ev.target.value),
-                    className: 'w-full p-3 border-2 border-gray-300 rounded-full focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition'
-                })
-              ),
-              filteredCreators.length > 0 ?
-                e('div', { className: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8" },
-                    filteredCreators.map(creator => e(CreatorCard, { key: creator.id, creator: creator }))
-                ) :
-                e('p', { className: 'text-center text-gray-500' }, 'No creators found.')
+            if (loading) return e('p', { className: "text-center" }, 'Loading creators...');
+            
+            return e('div', { className: "bg-white p-8 rounded-xl shadow-lg" },
+                e('h2', { className: "text-3xl font-bold text-center mb-4" }, 'Vote for a Creator'),
+                e('div', { className: "mb-8 max-w-lg mx-auto" },
+                    e('input', { type: 'text', placeholder: 'Search for a creator...', value: searchTerm, onChange: (ev) => setSearchTerm(ev.target.value), className: 'w-full p-3 border-2 border-gray-300 rounded-full focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition' })
+                ),
+                filteredCreators.length > 0 ?
+                    e('div', { className: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8" },
+                        filteredCreators.map(creator => e(CreatorCard, { key: creator.id, creator: creator }))
+                    ) :
+                    e('p', { className: 'text-center text-gray-500' }, 'No creators found.')
             );
         };
         
@@ -278,19 +265,19 @@
                 }
                 
                 const today = new Date().toISOString().slice(0, 10);
-                const voteRecordRef = db.collection(`artifacts/${appId}/users/${currentUser.uid}/dailyVotes`).doc(today);
-                const creatorRef = db.collection(`artifacts/${appId}/public/data/creators`).doc(selectedCreatorId);
+                const voteRecordRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/dailyVotes`, today);
+                const creatorRef = doc(db, `artifacts/${appId}/public/data/creators`, selectedCreatorId);
 
                 try {
-                    const voteDoc = await voteRecordRef.get();
-                    if (voteDoc.exists) {
+                    const voteDoc = await getDoc(voteRecordRef);
+                    if (voteDoc.exists()) {
                         setNotification({ type: 'error', message: "You have already cast your free vote today!" });
                         return;
                     }
                     
-                    const batch = db.batch();
-                    batch.update(creatorRef, { freeVotes: firebase.firestore.FieldValue.increment(1) });
-                    batch.set(voteRecordRef, { votedAt: new Date(), creatorId: selectedCreatorId });
+                    const batch = writeBatch(db);
+                    batch.update(creatorRef, { freeVotes: increment(1) });
+                    batch.set(voteRecordRef, { votedAt: serverTimestamp(), creatorId: selectedCreatorId });
                     await batch.commit();
                     setNotification({ type: 'success', message: "Thank you for your free vote!" });
 
@@ -328,8 +315,8 @@
                     setPage('home'); // Redirect if not a logged-in creator
                     return;
                 }
-                const unsub = db.collection(`artifacts/${appId}/public/data/creators`).doc(currentUser.uid).onSnapshot(doc => {
-                    setProfile(doc.exists ? doc.data() : null);
+                const unsub = onSnapshot(doc(db, `artifacts/${appId}/public/data/creators`, currentUser.uid), (doc) => {
+                    setProfile(doc.exists() ? doc.data() : null);
                 });
                 return () => unsub();
             }, [currentUser, isCreator]);
@@ -337,16 +324,17 @@
             const handleSave = async (e) => {
                 e.preventDefault();
                 setSaving(true);
-                const profileRef = db.collection(`artifacts/${appId}/public/data/creators`).doc(currentUser.uid);
+                const profileRef = doc(db, `artifacts/${appId}/public/data/creators`, currentUser.uid);
                 let updatedProfile = { ...profile };
 
                 try {
                     if (imageFile) {
-                        const storageRef = storage.ref(`profile_pics/${appId}/${currentUser.uid}`);
-                        await storageRef.put(imageFile);
-                        updatedProfile.profilePicUrl = await storageRef.getDownloadURL();
+                        const storagePath = `profile_pics/${appId}/${currentUser.uid}`;
+                        const storageRef = ref(storage, storagePath);
+                        await uploadBytes(storageRef, imageFile);
+                        updatedProfile.profilePicUrl = await getDownloadURL(storageRef);
                     }
-                    await profileRef.set(updatedProfile, { merge: true });
+                    await setDoc(profileRef, updatedProfile, { merge: true });
                     setNotification({ type: 'success', message: "Profile saved!" });
                     setPage('vote'); // Go to vote page after saving
                 } catch (error) {
@@ -408,17 +396,17 @@
                 )
             );
         };
-
+        
         const FaqPage = () => {
             const FaqItem = ({ q, a }) => {
-              const [isOpen, setIsOpen] = React.useState(false);
-              return e('div', { className: "border-b py-4" },
-                  e('button', { onClick: () => setIsOpen(!isOpen), className: "w-full flex justify-between items-center text-left" },
-                      e('h3', { className: "text-lg font-semibold" }, q),
-                      e('span', { className: `transform transition-transform ${isOpen ? 'rotate-180' : ''}` }, '▼')
-                  ),
-                  isOpen && e('p', { className: "mt-3 text-gray-600" }, a)
-              );
+                const [isOpen, setIsOpen] = React.useState(false);
+                return e('div', { className: "border-b py-4" },
+                    e('button', { onClick: () => setIsOpen(!isOpen), className: "w-full flex justify-between items-center text-left" },
+                        e('h3', { className: "text-lg font-semibold" }, q),
+                        e('span', { className: `transform transition-transform ${isOpen ? 'rotate-180' : ''}` }, '▼')
+                    ),
+                    isOpen && e('p', { className: "mt-3 text-gray-600" }, a)
+                );
             };
             return e('div', { className: "bg-white p-8 rounded-xl shadow-lg max-w-3xl mx-auto" },
                 e('h2', { className: "text-3xl font-bold text-center mb-8" }, 'Frequently Asked Questions'),
@@ -445,91 +433,91 @@
 
         // --- Main App Component ---
         const AppContent = () => {
-          const { 
-              page, setPage, 
-              currentUser, isCreator, 
-              setShowAuthModal, showAuthModal, 
-              showPurchaseModal, setShowPurchaseModal,
-              creators, selectedCreatorId
-          } = React.useContext(AppContext);
+            const { 
+                page, setPage, 
+                currentUser, isCreator, 
+                showAuthModal, setShowAuthModal, 
+                showPurchaseModal, setShowPurchaseModal,
+                creators, selectedCreatorId
+            } = React.useContext(AppContext);
 
-          const handleSignOut = () => {
-              auth.signOut().then(() => setPage('home')).catch(err => console.error("Sign out error:", err));
-          };
+            const handleSignOut = () => {
+                signOut(auth).then(() => setPage('home')).catch(err => console.error("Sign out error:", err));
+            };
 
-          const renderPage = () => {
-            switch (page) {
-              case 'vote': return e(VotePage);
-              case 'profile': return e(ProfilePage);
-              case 'creator-signup': return e(AuthPage, { isCreatorAuth: true });
-              case 'edit-profile': return e(EditProfilePage);
-              case 'winners': return e(WinnersPage);
-              case 'faq': return e(FaqPage);
-              case 'about': return e(AboutPage);
-              case 'contact': return e(ContactPage);
-              default: return e(HomePage);
-            }
-          };
+            const renderPage = () => {
+                switch (page) {
+                    case 'vote': return e(VotePage);
+                    case 'profile': return e(ProfilePage);
+                    case 'creator-signup': return e(AuthPage, { isCreatorAuth: true });
+                    case 'edit-profile': return e(EditProfilePage);
+                    case 'winners': return e(WinnersPage);
+                    case 'faq': return e(FaqPage);
+                    case 'about': return e(AboutPage);
+                    case 'contact': return e(ContactPage);
+                    default: return e(HomePage);
+                }
+            };
 
-          const NavLink = ({ pageName, children, icon }) => (
-            e('button', { onClick: () => setPage(pageName.toLowerCase()), className: `flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition ${page === pageName.toLowerCase() ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-500'}`},
-                e('span', { className: "w-4 h-4" }, icon),
-                e('span', null, children)
-            )
-          );
-          
-          const AuthButtons = () => {
-              if (currentUser && isCreator) {
-                  return e(React.Fragment, null, 
-                      e(NavLink, { pageName: "edit-profile", icon: '⚙️', children: 'Edit Profile' }),
-                      e('button', { onClick: handleSignOut, className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🚪'), e('span', null, 'Sign Out'))
-                  );
-              }
-              if (currentUser && !isCreator) {
-                  return e('button', { onClick: handleSignOut, className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🚪'), e('span', null, 'Sign Out'));
-              }
-              return e('button', { onClick: () => setShowAuthModal(true), className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🔑'), e('span', null, 'Voter Login'));
-          };
-          
-          const selectedCreatorForModal = creators.find(c => c.id === selectedCreatorId);
+            const NavLink = ({ pageName, children, icon }) => (
+                e('button', { onClick: () => setPage(pageName.toLowerCase()), className: `flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition ${page === pageName.toLowerCase() ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-500'}`},
+                    e('span', { className: "w-4 h-4" }, icon),
+                    e('span', null, children)
+                )
+            );
+            
+            const AuthButtons = () => {
+                if (currentUser && isCreator) {
+                    return e(React.Fragment, null, 
+                        e(NavLink, { pageName: "edit-profile", icon: '⚙️', children: 'Edit Profile' }),
+                        e('button', { onClick: handleSignOut, className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🚪'), e('span', null, 'Sign Out'))
+                    );
+                }
+                if (currentUser && !isCreator) {
+                    return e('button', { onClick: handleSignOut, className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🚪'), e('span', null, 'Sign Out'));
+                }
+                return e('button', { onClick: () => setShowAuthModal(true), className: "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition text-indigo-100 hover:bg-indigo-500" }, e('span', {className: "w-4 h-4"}, '🔑'), e('span', null, 'Voter Login'));
+            };
+            
+            const selectedCreatorForModal = creators.find(c => c.id === selectedCreatorId);
 
-          return e('div', { className: "bg-gray-100 min-h-screen" },
-              e('header', { className: "bg-indigo-600 text-white shadow-md sticky top-0 z-40" },
-                  e('nav', { className: "container mx-auto px-4 py-3 flex justify-between items-center" },
-                      e('button', { onClick: () => setPage('home'), className: "text-2xl font-bold flex items-center" },
-                          e('span', { className: "mr-2" }, '🏆'),
-                          'Creator Choice Awards'
-                      ),
-                      e('div', { className: "hidden md:flex items-center space-x-2" },
-                          e(NavLink, { pageName: "home", icon: '🏠', children: 'Home' }),
-                          e(NavLink, { pageName: "vote", icon: '�', children: 'Vote' }),
-                          e(NavLink, { pageName: "winners", icon: '🏆', children: 'Winners' }),
-                          e(AuthButtons)
-                      )
-                  )
-              ),
-              e(Notification),
-              e('main', { className: "container mx-auto p-4 md:p-8" }, renderPage()),
-              showAuthModal && e(AuthPage, { isCreatorAuth: false, onClose: () => setShowAuthModal(false) }),
-              showPurchaseModal && selectedCreatorForModal && e(PurchaseVotesModal, { creator: selectedCreatorForModal, onClose: () => setShowPurchaseModal(false) }),
-              
-              e('footer', { className: "bg-white mt-12 border-t" },
-                  e('div', { className: "container mx-auto py-8 px-4" },
-                      e('div', { className: "flex flex-col md:flex-row justify-between items-center text-center md:text-left" },
-                          e('div', null, 
-                              e('h3', {className: "text-xl font-bold"}, 'Creator Choice Awards'),
-                              e('p', {className: "text-gray-500"}, 'Chosen by the community.')
-                          ),
-                          e('div', { className: "flex space-x-6 mt-4 md:mt-0" },
-                              e('button', { onClick: () => setPage('about'), className: "text-gray-600 hover:text-indigo-600" }, 'About'),
-                              e('button', { onClick: () => setPage('faq'), className: "text-gray-600 hover:text-indigo-600" }, 'FAQ'),
-                              e('button', { onClick: () => setPage('contact'), className: "text-gray-600 hover:text-indigo-600" }, 'Contact')
-                          )
-                      ),
-                      e('div', { className: "text-center text-gray-400 mt-8 pt-4 border-t" }, `© ${new Date().getFullYear()} Creator Choice Awards. All Rights Reserved.`)
-                  )
-              )
-          );
+            return e('div', { className: "bg-gray-100 min-h-screen" },
+                e('header', { className: "bg-indigo-600 text-white shadow-md sticky top-0 z-40" },
+                    e('nav', { className: "container mx-auto px-4 py-3 flex justify-between items-center" },
+                        e('button', { onClick: () => setPage('home'), className: "text-2xl font-bold flex items-center" },
+                            e('span', { className: "mr-2" }, '🏆'),
+                            'Creator Choice Awards'
+                        ),
+                        e('div', { className: "hidden md:flex items-center space-x-2" },
+                            e(NavLink, { pageName: "home", icon: '🏠', children: 'Home' }),
+                            e(NavLink, { pageName: "vote", icon: '👍', children: 'Vote' }),
+                            e(NavLink, { pageName: "winners", icon: '🏆', children: 'Winners' }),
+                            e(AuthButtons)
+                        )
+                    )
+                ),
+                e(Notification),
+                e('main', { className: "container mx-auto p-4 md:p-8" }, renderPage()),
+                showAuthModal && e(AuthPage, { isCreatorAuth: false, onClose: () => setShowAuthModal(false) }),
+                showPurchaseModal && selectedCreatorForModal && e(PurchaseVotesModal, { creator: selectedCreatorForModal, onClose: () => setShowPurchaseModal(false) }),
+                
+                e('footer', { className: "bg-white mt-12 border-t" },
+                    e('div', { className: "container mx-auto py-8 px-4" },
+                        e('div', { className: "flex flex-col md:flex-row justify-between items-center text-center md:text-left" },
+                            e('div', null, 
+                                e('h3', {className: "text-xl font-bold"}, 'Creator Choice Awards'),
+                                e('p', {className: "text-gray-500"}, 'Chosen by the community.')
+                            ),
+                            e('div', { className: "flex space-x-6 mt-4 md:mt-0" },
+                                e('button', { onClick: () => setPage('about'), className: "text-gray-600 hover:text-indigo-600" }, 'About'),
+                                e('button', { onClick: () => setPage('faq'), className: "text-gray-600 hover:text-indigo-600" }, 'FAQ'),
+                                e('button', { onClick: () => setPage('contact'), className: "text-gray-600 hover:text-indigo-600" }, 'Contact')
+                            )
+                        ),
+                        e('div', { className: "text-center text-gray-400 mt-8 pt-4 border-t" }, `© ${new Date().getFullYear()} Creator Choice Awards. All Rights Reserved.`)
+                    )
+                )
+            );
         }
 
         // Provider component to wrap the app and manage all state
@@ -542,15 +530,16 @@
             const [isCreator, setIsCreator] = React.useState(false);
             const [showAuthModal, setShowAuthModal] = React.useState(false);
             const [showPurchaseModal, setShowPurchaseModal] = React.useState(false);
-            const [notification, setNotification] = React.useState(null); // { type: 'success' | 'error', message: '...' }
+            const [notification, setNotification] = React.useState(null);
             const [searchTerm, setSearchTerm] = React.useState('');
             
             // Listen for auth state changes
             React.useEffect(() => {
-                const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                const unsubscribe = onAuthStateChanged(auth, async (user) => {
                     if (user) {
-                        const creatorDoc = await db.collection(`artifacts/${appId}/public/data/creators`).doc(user.uid).get();
-                        setIsCreator(creatorDoc.exists);
+                        const creatorDocRef = doc(db, `artifacts/${appId}/public/data/creators`, user.uid);
+                        const creatorDoc = await getDoc(creatorDocRef);
+                        setIsCreator(creatorDoc.exists());
                     } else {
                         setIsCreator(false);
                     }
@@ -561,8 +550,8 @@
 
             // Fetch data from Firebase on component mount
             React.useEffect(() => {
-                const creatorsCollection = db.collection(`artifacts/${appId}/public/data/creators`);
-                const unsubscribe = creatorsCollection.onSnapshot(snapshot => {
+                const creatorsCollectionRef = collection(db, `artifacts/${appId}/public/data/creators`);
+                const unsubscribe = onSnapshot(creatorsCollectionRef, snapshot => {
                     const creatorsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     creatorsData.sort((a, b) => ((b.freeVotes || 0) + (b.purchasedVotes || 0)) - ((a.freeVotes || 0) + (a.purchasedVotes || 0)));
                     setCreators(creatorsData);
@@ -589,11 +578,10 @@
         };
 
         ReactDOM.render(
-          e(AppProvider),
-          document.getElementById('root')
+            e(AppProvider),
+            document.getElementById('root')
         );
     </script>
 
 </body>
 </html>
-�
