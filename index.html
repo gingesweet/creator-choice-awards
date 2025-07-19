@@ -36,15 +36,24 @@
     -->
     <script>
         // --- Firebase Configuration ---
-       const firebaseConfig = {
-  apiKey: "AIzaSyArZBKez8OxR3e9mex2uBSmO7VTpMXw7QI",
-  authDomain: "creator-choice-awards.firebaseapp.com",
-  projectId: "creator-choice-awards",
-  storageBucket: "creator-choice-awards.firebasestorage.app",
-  messagingSenderId: "790022484889",
-  appId: "1:790022484889:web:725d3ab1ccbd6e914a5908",
-  measurementId: "G-NGGTHLVK30"
-};
+        // ====================================================================================
+        // IMPORTANT: PASTE YOUR REAL FIREBASE WEB API KEY IN THE LINE BELOW
+        // You can find this key at the top of your Firebase Project Settings page.
+        // It should start with "AIzaSyA..."
+        // ====================================================================================
+        const YOUR_API_KEY = "AIzaSyArZBKez8OxR3e9mex2uBSmO7VTpMXw7QI";
+        // ====================================================================================
+
+
+        // --- DO NOT EDIT THE CONFIGURATION BELOW THIS LINE ---
+        const firebaseConfig = {
+          apiKey: YOUR_API_KEY,
+          authDomain: "creator-choice-awards.firebaseapp.com",
+          projectId: "creator-choice-awards",
+          storageBucket: "creator-choice-awards.appspot.com",
+          messagingSenderId: "790022484889",
+          appId: "1:790022484889:web:725d3ab1ccbdbe914a5908"
+        };
 
         // Initialize Firebase
         if (!firebase.apps.length) {
@@ -493,7 +502,7 @@
                       ),
                       e('div', { className: "hidden md:flex items-center space-x-2" },
                           e(NavLink, { pageName: "home", icon: '🏠', children: 'Home' }),
-                          e(NavLink, { pageName: "vote", icon: '👍', children: 'Vote' }),
+                          e(NavLink, { pageName: "vote", icon: '�', children: 'Vote' }),
                           e(NavLink, { pageName: "winners", icon: '🏆', children: 'Winners' }),
                           e(AuthButtons)
                       )
@@ -587,3 +596,4 @@
 
 </body>
 </html>
+�
